@@ -1,71 +1,60 @@
-name: CI-Build-Windows
+name: Ultimate-RDP-Ngrok
 on: 
   workflow_dispatch:
     inputs:
-      pass:
-        description: 'Set RustDesk Password'
+      ngrok_token:
+        description: '38gzDQwrGzxf7oHgCjWXhvS5OnV_j236sBb2h8ttQyi1kG8H'
         required: true
-        default: 'robanik123'
+      pincode:
+        description: 'Set Windows Password'
+        required: true
+        default: 'Robanik123!'
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Prepare Env
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~\AppData\Roaming\discord
-          ~\AppData\Local\discord
-        key: app-data-v1
-
-    - name: Install and Launch
+    - name: Set Password & Audio
       shell: powershell
       run: |
-        # 1. Enable Audio
+        # Устанавливаем пароль для пользователя runneradmin
+        $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $Password
+        
+        # Включаем звук и RDP
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
-        $t="HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        Set-ItemProperty -Path $t -Name "fDisableAudioCapture" -Value 0
-        Set-ItemProperty -Path $t -Name "fDisableAudio" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudio" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudioCapture" -Value 0
+        (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-        # 2. Download Software
-        $r="https://github.com/rustdesk/rustdesk/releases/download/1.2.3-2/rustdesk-1.2.3-2-x86_64.exe"
-        $d="https://discord.com/api/download?platform=win"
-        Invoke-WebRequest $r -OutFile "rd.exe"
-        Invoke-WebRequest $d -OutFile "ds.exe"
-        
-        # 3. Install Discord & Start RustDesk
-        Start-Process "ds.exe" -ArgumentList "/S"
-        Start-Process "rd.exe" -ArgumentList "--password ${{ github.event.inputs.pass }}"
-
-    - name: Finalizing
+    - name: Install Ngrok & Discord
       shell: powershell
       run: |
-        Write-Host "Searching for RustDesk ID..."
-        $id = ""
-        for ($i=0; $i -lt 20; $i++) {
-            Start-Sleep -Seconds 10
-            $cfg = Get-Content "$env:APPDATA\RustDesk\config\RustDesk.toml" -ErrorAction SilentlyContinue
-            if ($cfg) {
-                $idLine = $cfg | Select-String "id ="
-                if ($idLine) {
-                    Write-Host "============================"
-                    Write-Host "SYSTEM IS READY!"
-                    Write-Host "YOUR $idLine"
-                    Write-Host "YOUR PASSWORD: ${{ github.event.inputs.pass }}"
-                    Write-Host "============================"
-                    $id = "found"
-                    break
-                }
-            }
-            Write-Host "Still waiting for ID... (Attempt $i)"
-        }
-        
-        if (-not $id) { Write-Error "ID not found in time. Check if RustDesk started." }
+        Invoke-WebRequest "https://bin.equinox.io/c/b34edqjn9kv/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+        Expand-Archive "ngrok.zip"
+        Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
+        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
 
+    - name: Start Ngrok Tunnel
+      shell: powershell
+      run: |
+        .\ngrok.exe config add-authtoken ${{ github.event.inputs.ngrok_token }}
+        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
+        Start-Sleep -Seconds 10
+        
+        # Выводим адрес для подключения
+        $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
+        $address = $tunnels.tunnels.public_url -replace 'tcp://', ''
+        Write-Host "=========================================="
+        Write-Host "CONNECT TO: $address"
+        Write-Host "USER: runneradmin"
+        Write-Host "PASS: ${{ github.event.inputs.pincode }}"
+        Write-Host "=========================================="
+
+    - name: Keep Alive
+      run: |
         while ($true) {
-          if (Test-Path "C:\stop.txt") { break }
-          (New-Object -ComObject WScript.Shell).SendKeys('{SCROLLLOCK}')
+          Write-Host "Session Active..."
           Start-Sleep -Seconds 60
         }
