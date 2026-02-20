@@ -1,57 +1,51 @@
-name: Windows-10-Ultimate-RDP
+name: Ideal-Fast-RDP
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Команда из Google Remote Desktop'
+        description: 'Команда от Google'
         required: true
       pincode:
-        description: 'ПИН-КОД (6 цифр)'
+        description: 'ПИН (6 цифр)'
         required: true
 
 jobs:
   build:
-    # Запускаем именно Windows 10 (Server 2019)
     runs-on: windows-2019
     steps:
-    - name: Checkout (нужен для работы кэша)
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cache Applications Data
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~\AppData\Roaming\Discord
-          ~\AppData\Roaming\Telegram Desktop
-        # Ключ кэша — если он совпадет, данные подтянутся
-        key: windows-apps-data-v1
-        restore-keys: |
-          windows-apps-data-
-
-    - name: Download and Install Apps
-      run: |
-        # Скачиваем Telegram и Discord
-        $tgUrl = "https://telegram.org/dl/desktop/win64"
-        $dsUrl = "https://discord.com/api/download?platform=win"
-        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        
-        Invoke-WebRequest -Uri $tgUrl -OutFile "TelegramSetup.exe"
-        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
-        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
-        
-        # Тихая установка
-        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
-        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
-        # Телеграм просто запускаем, он портативный в установке
-        Start-Process "TelegramSetup.exe" -ArgumentList "/S"
-
-    - name: Authentication
+    - name: Setup System
       shell: powershell
       run: |
+        # Установка обоев (если файл загружен)
+        if (Test-Path "wallpaper.jpg") {
+            $wallpaperPath = "C:\wallpaper.jpg"
+            Copy-Item "wallpaper.jpg" -Destination $wallpaperPath
+            $code = @'
+            using System.Runtime.InteropServices;
+            public class Wallpaper {
+                [DllImport("user32.dll", CharSet = CharSet.Auto)]
+                public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+            }
+'@
+            Add-Type -TypeDefinition $code
+            [Wallpaper]::SystemParametersInfo(0x0014, 0, $wallpaperPath, 0x01 -bor 0x02)
+        }
+
+        # Быстрая загрузка и установка
+        Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "rdp.msi"
+        Invoke-WebRequest -Uri "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
+        
+        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
+        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
+        
+        # Авторизация
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
     - name: Keep Alive
+      shell: powershell
       run: |
-        Write-Host "Windows 10 запущена! Discord и Telegram готовы."
-        while ($true) { Start-Sleep -Seconds 3600 }
-        
+        Write-Host "Все готово! Обои и Дискорд на месте."
+        while ($true) { Start-Sleep -Seconds 60 }
