@@ -1,12 +1,12 @@
-name: RDP-FINAL-WORK
+name: Robanik-Ultimate-NoNgrok
 on: 
   workflow_dispatch:
     inputs:
-      ngrok_token:
-        description: 'Ngrok Token'
+      auth_key:
+        description: 'Вставь Auth Key из Tailscale'
         required: true
       pincode:
-        description: 'Password'
+        description: 'Пароль для RDP'
         required: true
         default: 'Robanik123!'
 
@@ -18,34 +18,31 @@ jobs:
       run: |
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
         (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
 
-    - name: Download Files
+    - name: Install Tailscale & Discord
       run: |
-        # Качаем ngrok напрямую в текущую папку
-        Invoke-WebRequest "https://bin.equinox.io/c/b34edqjn9kv/ngrok-v3-stable-windows-amd64.zip" -OutFile "ng.zip"
-        Expand-Archive "ng.zip" -DestinationPath "."
-        # Качаем Дискорд
-        Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "ds.exe"
-        Start-Process "ds.exe" -ArgumentList "/S"
+        # Ставим Tailscale через официальный установщик
+        curl -L -o tailscale.msi https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi
+        Start-Process msiexec.exe -ArgumentList '/i tailscale.msi /qn /norestart' -Wait
+        
+        # Дискорд в фоне
+        curl -L -o ds.exe "https://discord.com/api/download?platform=win"
+        Start-Process ds.exe -ArgumentList "/S"
 
-    - name: Connect and Show ID
+    - name: Connect to Mesh
       run: |
-        .\ngrok.exe config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
-        Start-Sleep -Seconds 15
-        $t = Invoke-RestMethod http://localhost:4040/api/tunnels
-        $addr = $t.tunnels.public_url -replace 'tcp://', ''
-        
-        # МАГИЯ: Это выведет адрес прямо в заголовок логов!
-        Write-Host "::notice title=YOUR_RDP_ADDRESS::$addr"
-        
+        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ github.event.inputs.auth_key }} --hostname=robanik-cloud
+
+    - name: Keep Alive
+      run: |
         Write-Host "============================="
-        Write-Host "ADDRESS: $addr"
+        Write-Host "PC IS READY!"
+        Write-Host "NAME: robanik-cloud"
         Write-Host "USER: runneradmin"
         Write-Host "PASS: ${{ github.event.inputs.pincode }}"
         Write-Host "============================="
-        
         while($true){ Start-Sleep 60 }
