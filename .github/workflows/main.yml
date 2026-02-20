@@ -1,9 +1,9 @@
-name: Windows-RDP
+name: Windows-RDP-Final
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: '& "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" --code="4/0AfrIepDQW_sD5kZly6uhU7czCvbHGpjO4IeELnEJa8nLf_YD3tl1GMHbgIKcilnw2yuGHQ" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME'
+        description: 'Вставь команду из Google Remote Desktop (которая начинается с & или powershell)'
         required: true
 
 jobs:
@@ -16,9 +16,10 @@ jobs:
         Invoke-WebRequest -Uri $url -OutFile "rdp.msi"
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
     - name: Authentication
-      shell: cmd
-      run: ${{ github.event.inputs.authcode }}
+      shell: powershell
+      run: |
+        ${{ github.event.inputs.authcode }}
     - name: Keep Alive
       run: |
-        Write-Host "Виртуалка запущена! Не закрывай этот Action."
+        Write-Host "Виртуалка успешно запущена! Можно подключаться через телефон."
         while ($true) { Start-Sleep -Seconds 3600 }
