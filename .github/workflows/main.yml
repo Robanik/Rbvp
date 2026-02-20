@@ -1,9 +1,9 @@
-name: Ultimate-Cloud-PC-Robanik-Edition
+name: Ultimate-Cloud-PC-Robanik-Fixed
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Command from Google Remote Desktop (PowerShell)'
+        description: 'Command from Google Remote Desktop'
         required: true
       pincode:
         description: 'PIN (6 digits)'
@@ -17,79 +17,52 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # 1. Restore Data
-    - name: Restore Persistence Data
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~\AppData\Roaming\discord
-          ~\AppData\Local\discord
-          ~\AppData\Local\Google\Chrome Remote Desktop
-        key: pc-data-${{ github.run_id }}
-        restore-keys: |
-          pc-data-
-
-    # 2. System & Audio Setup
-    - name: System & Audio Setup
+    - name: Persistence & Setup
       shell: powershell
       run: |
-        # Audio Service Enable
+        # Включаем звук
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         
-        # Registry Fix for RDP Audio
-        $regPath = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        Set-ItemProperty -Path $regPath -Name "fDisableAudioCapture" -Value 0
-        Set-ItemProperty -Path $regPath -Name "fDisableAudio" -Value 0
-        
-        # Install Software
-        Write-Host "Installing Software: CRD, Discord, VAC..."
-        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y
+        # Установка софта (игнорируем ошибки Discord, он капризный)
+        Write-Host "Installing Soft..."
+        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y --ignore-checksums || Write-Host "Soft install warning"
 
-    # 3. Discord Fix & RDP Launch
-    - name: Launch Remote Desktop
+    - name: Launch PC
       shell: powershell
+      env:
+        # Передаем код через переменную окружения, чтобы кавычки не ломались
+        GOOGLE_AUTH_CODE: ${{ github.event.inputs.authcode }}
       run: |
-        if (-not "${{ github.event.inputs.authcode }}") {
-          Write-Error "Auth Code is empty!"
+        # Проверяем наличие кода
+        if (-not $env:GOOGLE_AUTH_CODE) {
+          Write-Error "Auth Code is missing! Please paste the command."
           exit 1
         }
 
-        # Fix Discord path and run
-        Write-Host "Configuring Discord..."
+        # Фикс Discord
+        Write-Host "Fixing Discord..."
         $discordExe = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
         if ($discordExe) {
             Start-Process $discordExe.FullName -ArgumentList "--squirrel-firstrun"
         }
 
-        # Run Google RDP Command
-        Write-Host "Starting Google Remote Desktop..."
-        try {
-            ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
-        } catch {
-            Write-Host "Warning: RDP command failed, but continuing..."
-        }
+        # Запуск RDP через вызов переменной
+        Write-Host "Starting Remote Desktop..."
+        Invoke-Expression $env:GOOGLE_AUTH_CODE --pin=${{ github.event.inputs.pincode }}
 
-    # 4. Keep-Alive Loop
-    - name: Keep-Alive Loop
+    - name: Keep-Alive
       shell: powershell
       run: |
-        $minutes = 0
-        Write-Host "==============================================="
-        Write-Host "PC STARTED SUCCESSFULLY!"
-        Write-Host "To save data, create C:\stop.txt file"
-        Write-Host "==============================================="
-        
+        Write-Host "=== PC RUNNING ==="
+        $i = 0
         while ($true) {
-          $minutes++
-          if ($minutes % 5 -eq 0) {
+          $i++
+          if ($i % 5 -eq 0) { 
+            Write-Host "Still alive: $i min"
             $wsh = New-Object -ComObject WScript.Shell
             $wsh.SendKeys('{SCROLLLOCK}')
-            Write-Host "Session active: $minutes min."
           }
-          if (Test-Path "C:\stop.txt") {
-            Write-Host "Stop file detected. Saving cache and exiting..."
-            break
-          }
+          if (Test-Path "C:\stop.txt") { break }
           Start-Sleep -Seconds 60
         }
