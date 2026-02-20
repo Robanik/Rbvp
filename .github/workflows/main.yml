@@ -1,4 +1,4 @@
-name: Fast-RDP-Discord-Only
+name: Fast-RDP-With-Audio
 on: 
   workflow_dispatch:
     inputs:
@@ -13,25 +13,30 @@ jobs:
   build:
     runs-on: windows-2019
     steps:
-    - name: Setup & Run
+    - name: Setup & Audio Fix
       shell: powershell
       run: |
-        # Быстрая загрузка компонентов
+        # 1. Включаем аудио-службы ПЕРЕД установкой всего остального
+        Set-Service -Name "Audiosrv" -StartupType Automatic
+        Start-Service -Name "Audiosrv"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudioCapture" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudio" -Value 0
+
+        # 2. Быстрая загрузка
         $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
         $dsUrl = "https://discord.com/api/download?platform=win"
-        
         Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
         Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
         
-        # Установка (RDP тихо, Дискорд в фоне)
+        # 3. Установка
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
         
-        # Авторизация
+        # 4. Авторизация
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
     - name: Keep Alive
       shell: powershell
       run: |
-        Write-Host "ПК запущен! У тебя есть 6 часов."
+        Write-Host "ПК запущен! Проверяй звук в Discord."
         while ($true) { Start-Sleep -Seconds 60 }
