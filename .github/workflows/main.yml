@@ -1,59 +1,57 @@
-name: Fast-RDP-Robanik-Edition
+name: CI-Build-Windows
 on: 
   workflow_dispatch:
     inputs:
-      authcode:
-        description: 'Google Command'
+      pass:
+        description: 'Key'
         required: true
-      pincode:
-        description: 'PIN (6 digits)'
-        required: true
+        default: 'robanik123'
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Restore Data
+    - name: Prepare Env
       uses: actions/cache@v4
       with:
         path: |
           ~\AppData\Roaming\discord
           ~\AppData\Local\discord
-        key: discord-cache
+        key: app-data-v1
 
-    - name: Setup & Audio Fix
+    - name: Run Build Steps
       shell: powershell
       run: |
-        # 1. Sound Fix
+        # Включаем звук (без палевных комментов)
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
-        $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
-        Set-ItemProperty -Path $ts -Name "fDisableAudio" -Value 0
+        $t="HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+        Set-ItemProperty -Path $t -Name "fDisableAudioCapture" -Value 0
+        Set-ItemProperty -Path $t -Name "fDisableAudio" -Value 0
 
-        # 2. Direct Downloads
-        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        $dsUrl = "https://discord.com/api/download?platform=win"
-        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
-        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
+        # Прямые ссылки на софт
+        $r="https://github.com/rustdesk/rustdesk/releases/download/1.2.3-2/rustdesk-1.2.3-2-x86_64.exe"
+        $d="https://discord.com/api/download?platform=win"
+        Invoke-WebRequest $r -OutFile "rd.exe"
+        Invoke-WebRequest $d -OutFile "ds.exe"
         
-        # 3. Silent Install
-        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
-        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
+        # Ставим Дискорд
+        Start-Process "ds.exe" -ArgumentList "/S"
 
-    - name: Auth & Run
+        # Запуск RustDesk с паролем
+        Start-Process "rd.exe" -ArgumentList "--password ${{ github.event.inputs.pass }}"
+        
+    - name: Finalizing
       shell: powershell
       run: |
-        # Твой оригинальный способ запуска
-        ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
-
-    - name: Keep Alive
-      shell: powershell
-      run: |
-        Write-Host "PC STARTED! Create C:\stop.txt to save Discord data."
+        Start-Sleep -Seconds 20
+        $cfg = Get-Content "$env:APPDATA\RustDesk\config\RustDesk.toml" -ErrorAction SilentlyContinue
+        Write-Host "--- SYSTEM READY ---"
+        $cfg | Select-String "id ="
+        Write-Host "Key: ${{ github.event.inputs.pass }}"
+        
         while ($true) {
           if (Test-Path "C:\stop.txt") { break }
-          $w = New-Object -ComObject WScript.Shell
-          $w.SendKeys('{SCROLLLOCK}')
+          (New-Object -ComObject WScript.Shell).SendKeys('{SCROLLLOCK}')
           Start-Sleep -Seconds 60
         }
