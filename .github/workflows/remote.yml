@@ -3,10 +3,10 @@ on:
   workflow_dispatch:
     inputs:
       crd_code:
-        description: 'Вставь сюда --code из Google Headless'
+        description: 'Вставь ТОЛЬКО код (после --code=)'
         required: true
       crd_pin:
-        description: 'Придумай PIN (минимум 6 цифр) для входа'
+        description: 'PIN (минимум 6 цифр)'
         required: true
         default: '123456'
 
@@ -14,37 +14,39 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Установка компонентов (CRD, Discord, Audio)
+    - name: Установка Chrome Remote Desktop
       run: |
-        # CRD
         $crdUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
         Invoke-WebRequest -Uri $crdUrl -OutFile "crd.msi"
         Start-Process msiexec.exe -ArgumentList "/i crd.msi /qn" -Wait
-        
-        # Discord
+
+    - name: Установка Discord
+      run: |
         $discordUrl = "https://discord.com/api/download?platform=win"
         Invoke-WebRequest -Uri $discordUrl -OutFile "DiscordSetup.exe"
         Start-Process ".\DiscordSetup.exe" -ArgumentList "--s" -Wait
-        
-        # Виртуальный звук (нужен для запуска аудио-потока)
-        Invoke-WebRequest -Uri "https://download.vb-audio.com/Download_Html/VBCABLE_Setup_x64.exe" -OutFile "VBAudio.exe"
-        Start-Process ".\VBAudio.exe" -ArgumentList "/i /silent" -Wait
+
+    - name: Попытка включить звук (Virtual Audio)
+      continue-on-error: true # Если опять 404, билд пойдет дальше
+      run: |
+        # Используем шоколати (choco) только для аудио, так как их зеркала надежнее
+        choco install vb-audio-vac -y
 
     - name: Запуск Хоста
+      shell: pwsh
       run: |
-        # Используем данные из полей ввода (inputs)
+        # Запуск службы CRD с твоим кодом
         & "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" `
         --code="${{ github.event.inputs.crd_code }}" `
         --redirect-url="https://remotedesktop.google.com/_/oauthredirect" `
         --name=$Env:COMPUTERNAME `
         --pin=${{ github.event.inputs.crd_pin }}
 
-    - name: Поддержание сессии (6 часов)
+    - name: Keep Alive (6 hours)
       run: |
-        Write-Host "PC ready! Connect now."
+        Write-Host "PC is ALIVE. Connect via remotedesktop.google.com"
         $i = 0
         while($i -lt 360) {
           Start-Sleep -Seconds 60
           $i++
         }
-        
