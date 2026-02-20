@@ -3,10 +3,10 @@ on:
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Вставь ПОЛНУЮ команду из Google Remote Desktop (Windows PowerShell)'
+        description: 'Command from Google Remote Desktop (PowerShell)'
         required: true
       pincode:
-        description: 'ПИН (минимум 6 цифр)'
+        description: 'PIN (6 digits)'
         required: true
         default: '123456'
 
@@ -17,7 +17,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # 1. Кэширование данных (Discord, Chrome Remote Desktop)
+    # 1. Restore Data
     - name: Restore Persistence Data
       uses: actions/cache@v4
       with:
@@ -29,74 +29,67 @@ jobs:
         restore-keys: |
           pc-data-
 
-    # 2. Подготовка системы и Аудио
+    # 2. System & Audio Setup
     - name: System & Audio Setup
       shell: powershell
       run: |
-        # Включаем службу звука
+        # Audio Service Enable
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         
-        # Разрешаем захват и передачу звука через RDP в реестре
-        $registryPath = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        Set-ItemProperty -Path $registryPath -Name "fDisableAudioCapture" -Value 0
-        Set-ItemProperty -Path $registryPath -Name "fDisableAudio" -Value 0
+        # Registry Fix for RDP Audio
+        $regPath = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+        Set-ItemProperty -Path $regPath -Name "fDisableAudioCapture" -Value 0
+        Set-ItemProperty -Path $regPath -Name "fDisableAudio" -Value 0
         
-        # Устанавливаем софт: RDP, Discord и Виртуальный аудио-кабель
-        Write-Host "Устанавливаю софт через Chocolatey..."
+        # Install Software
+        Write-Host "Installing Software: CRD, Discord, VAC..."
         choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y
 
-    # 3. Фикс Discord и Запуск RDP
+    # 3. Discord Fix & RDP Launch
     - name: Launch Remote Desktop
       shell: powershell
       run: |
-        # Проверка на пустой ввод
         if (-not "${{ github.event.inputs.authcode }}") {
-          Write-Error "Ошибка: Поле Auth Code пустое! Скопируй команду с сайта Google."
+          Write-Error "Auth Code is empty!"
           exit 1
         }
 
-        # Фикс ошибки Discord (первый запуск)
-        Write-Host "Принудительная настройка Discord..."
+        # Fix Discord path and run
+        Write-Host "Configuring Discord..."
         $discordExe = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
         if ($discordExe) {
             Start-Process $discordExe.FullName -ArgumentList "--squirrel-firstrun"
         }
 
-        # Запуск Google Remote Desktop
-        Write-Host "Запускаю удаленный рабочий стол..."
+        # Run Google RDP Command
+        Write-Host "Starting Google Remote Desktop..."
         try {
             ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
         } catch {
-            Write-Host "Предупреждение: Ошибка при выполнении команды Google, но продолжаем..."
+            Write-Host "Warning: RDP command failed, but continuing..."
         }
 
-    # 4. Бесконечный цикл с защитой от АФК и сохранением данных
+    # 4. Keep-Alive Loop
     - name: Keep-Alive Loop
       shell: powershell
       run: |
         $minutes = 0
         Write-Host "==============================================="
-        Write-Host "ПОБЕДА! ПК ЗАПУЩЕН."
-        Write-Host "Инструкция по сохранению данных:"
-        Write-Host "Чтобы сохранить настройки Discord, создай файл C:\stop.txt"
+        Write-Host "PC STARTED SUCCESSFULLY!"
+        Write-Host "To save data, create C:\stop.txt file"
         Write-Host "==============================================="
         
         while ($true) {
           $minutes++
-          
-          # Анти-АФК: имитируем нажатие клавиши ScrollLock каждые 5 минут
           if ($minutes % 5 -eq 0) {
             $wsh = New-Object -ComObject WScript.Shell
             $wsh.SendKeys('{SCROLLLOCK}')
-            Write-Host "Активность подтверждена. Прошло $minutes мин."
+            Write-Host "Session active: $minutes min."
           }
-
-          # Проверка триггера на сохранение (кэширование)
           if (Test-Path "C:\stop.txt") {
-            Write-Host "Файл stop.txt найден! Завершаю работу для сохранения кэша..."
+            Write-Host "Stop file detected. Saving cache and exiting..."
             break
           }
-
           Start-Sleep -Seconds 60
         }
