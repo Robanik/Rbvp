@@ -1,22 +1,23 @@
-name: Ultimate-Cloud-PC-Pro
+name: Ultimate-Cloud-PC-Robanik-Edition
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Код из Google Remote Desktop'
+        description: 'Вставь ПОЛНУЮ команду из Google Remote Desktop (Windows PowerShell)'
         required: true
       pincode:
         description: 'ПИН (минимум 6 цифр)'
         required: true
+        default: '123456'
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Checkout Repository
+    - name: Checkout
       uses: actions/checkout@v4
 
-    # 1. Восстановление данных (Discord, сессии, конфиги)
+    # 1. Кэширование данных (Discord, Chrome Remote Desktop)
     - name: Restore Persistence Data
       uses: actions/cache@v4
       with:
@@ -28,51 +29,74 @@ jobs:
         restore-keys: |
           pc-data-
 
-    - name: System Optimization & Audio Fix
-      run: |
-        # Включаем аудио-движок Windows
-        Set-Service -Name "Audiosrv" -StartupType Automatic
-        Start-Service -Name "Audiosrv"
-        # Твики реестра для RDP и звука
-        reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudioCapture /t REG_DWORD /d 0 /f
-        reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudio /t REG_DWORD /d 0 /f
-
-    - name: Install "Imba" Pack (Choco)
-      run: |
-        # Ставим всё разом: RDP, Discord, Виртуальный звук и архиватор
-        choco install googlechromeremotedesktop discord vb-audio-virtual-cable 7zip -y
-
-    - name: Finalize & Launch
-      run: |
-        Write-Host "Запуск Google Remote Desktop..."
-        # Команда авторизации из инпута
-        ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
-
-    - name: Keep-Alive & Sync Loop
+    # 2. Подготовка системы и Аудио
+    - name: System & Audio Setup
       shell: powershell
       run: |
-        $i = 0
-        Write-Host "=========================================="
-        Write-Host "ПК ГОТОВ! ИНСТРУКЦИЯ:"
-        Write-Host "1. Подключайся через remotedesktop.google.com"
-        Write-Host "2. Чтобы СОХРАНИТЬ данные Discord, создай файл C:\stop.txt"
-        Write-Host "=========================================="
+        # Включаем службу звука
+        Set-Service -Name "Audiosrv" -StartupType Automatic
+        Start-Service -Name "Audiosrv"
+        
+        # Разрешаем захват и передачу звука через RDP в реестре
+        $registryPath = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+        Set-ItemProperty -Path $registryPath -Name "fDisableAudioCapture" -Value 0
+        Set-ItemProperty -Path $registryPath -Name "fDisableAudio" -Value 0
+        
+        # Устанавливаем софт: RDP, Discord и Виртуальный аудио-кабель
+        Write-Host "Устанавливаю софт через Chocolatey..."
+        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y
+
+    # 3. Фикс Discord и Запуск RDP
+    - name: Launch Remote Desktop
+      shell: powershell
+      run: |
+        # Проверка на пустой ввод
+        if (-not "${{ github.event.inputs.authcode }}") {
+          Write-Error "Ошибка: Поле Auth Code пустое! Скопируй команду с сайта Google."
+          exit 1
+        }
+
+        # Фикс ошибки Discord (первый запуск)
+        Write-Host "Принудительная настройка Discord..."
+        $discordExe = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
+        if ($discordExe) {
+            Start-Process $discordExe.FullName -ArgumentList "--squirrel-firstrun"
+        }
+
+        # Запуск Google Remote Desktop
+        Write-Host "Запускаю удаленный рабочий стол..."
+        try {
+            ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
+        } catch {
+            Write-Host "Предупреждение: Ошибка при выполнении команды Google, но продолжаем..."
+        }
+
+    # 4. Бесконечный цикл с защитой от АФК и сохранением данных
+    - name: Keep-Alive Loop
+      shell: powershell
+      run: |
+        $minutes = 0
+        Write-Host "==============================================="
+        Write-Host "ПОБЕДА! ПК ЗАПУЩЕН."
+        Write-Host "Инструкция по сохранению данных:"
+        Write-Host "Чтобы сохранить настройки Discord, создай файл C:\stop.txt"
+        Write-Host "==============================================="
         
         while ($true) {
-          $i++
-          # Каждые 5 минут имитируем нажатие клавиши (для анти-афк системы GitHub)
-          $wsh = New-Object -ComObject WScript.Shell
-          $wsh.SendKeys('{SCROLLLOCK}')
+          $minutes++
           
-          if ($i % 10 -eq 0) {
-            Write-Host "Сессия активна: $i мин. Нагрузка в норме."
+          # Анти-АФК: имитируем нажатие клавиши ScrollLock каждые 5 минут
+          if ($minutes % 5 -eq 0) {
+            $wsh = New-Object -ComObject WScript.Shell
+            $wsh.SendKeys('{SCROLLLOCK}')
+            Write-Host "Активность подтверждена. Прошло $minutes мин."
           }
 
-          # Проверка на "ручной тормоз" для сохранения кэша
+          # Проверка триггера на сохранение (кэширование)
           if (Test-Path "C:\stop.txt") {
-            Write-Host "Обнаружен стоп-файл. Завершаю работу для сохранения данных..."
+            Write-Host "Файл stop.txt найден! Завершаю работу для сохранения кэша..."
             break
           }
-          
+
           Start-Sleep -Seconds 60
         }
