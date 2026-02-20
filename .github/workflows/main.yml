@@ -1,4 +1,4 @@
-name: Ultimate-PC-Final
+name: Fast-RDP-Robanik-Edition
 on: 
   workflow_dispatch:
     inputs:
@@ -6,54 +6,54 @@ on:
         description: 'Google Command'
         required: true
       pincode:
-        description: 'PIN'
+        description: 'PIN (6 digits)'
         required: true
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Cache Data
+    - name: Restore Data
       uses: actions/cache@v4
       with:
         path: |
           ~\AppData\Roaming\discord
           ~\AppData\Local\discord
-        key: pc-data-v1
+        key: discord-cache
 
-    - name: Setup
+    - name: Setup & Audio Fix
       shell: powershell
       run: |
+        # 1. Sound Fix
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
         Set-ItemProperty -Path $ts -Name "fDisableAudio" -Value 0
-        
-        Write-Host "Installing software..."
-        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y --no-progress
-        
-        Write-Host "Starting Discord fix..."
-        $ds = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
-        if ($ds) { Start-Process $ds.FullName -ArgumentList "--squirrel-firstrun" }
 
-    - name: Auth
+        # 2. Direct Downloads
+        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        $dsUrl = "https://discord.com/api/download?platform=win"
+        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
+        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
+        
+        # 3. Silent Install
+        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
+        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
+
+    - name: Auth & Run
       shell: powershell
       run: |
+        # Твой оригинальный способ запуска
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
     - name: Keep Alive
       shell: powershell
       run: |
-        Write-Host "PC is UP! To save data, create C:\stop.txt"
-        $i = 0
+        Write-Host "PC STARTED! Create C:\stop.txt to save Discord data."
         while ($true) {
-          $i++
-          if ($i % 5 -eq 0) { 
-            Write-Host "Uptime: $i min"
-            $w = New-Object -ComObject WScript.Shell
-            $w.SendKeys('{SCROLLLOCK}')
-          }
           if (Test-Path "C:\stop.txt") { break }
+          $w = New-Object -ComObject WScript.Shell
+          $w.SendKeys('{SCROLLLOCK}')
           Start-Sleep -Seconds 60
         }
