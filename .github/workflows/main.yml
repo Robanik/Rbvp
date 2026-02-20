@@ -1,36 +1,57 @@
-name: Windows-RDP-Discord-Auto
+name: Windows-10-Ultimate-RDP
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Вставь команду из Google Remote Desktop'
+        description: 'Команда из Google Remote Desktop'
         required: true
       pincode:
-        description: 'Вставь свой ПИН-КОД (6 цифр)'
+        description: 'ПИН-КОД (6 цифр)'
         required: true
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Запускаем именно Windows 10 (Server 2019)
+    runs-on: windows-2019
     steps:
-    - name: Install Discord and Chrome RDP
+    - name: Checkout (нужен для работы кэша)
+      uses: actions/checkout@v4
+
+    - name: Cache Applications Data
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~\AppData\Roaming\Discord
+          ~\AppData\Roaming\Telegram Desktop
+        # Ключ кэша — если он совпадет, данные подтянутся
+        key: windows-apps-data-v1
+        restore-keys: |
+          windows-apps-data-
+
+    - name: Download and Install Apps
       run: |
-        # Скачиваем Дискорд
-        $discordUrl = "https://discord.com/api/download?platform=win"
-        Invoke-WebRequest -Uri $discordUrl -OutFile "DiscordSetup.exe"
-        
-        # Скачиваем Chrome RDP
+        # Скачиваем Telegram и Discord
+        $tgUrl = "https://telegram.org/dl/desktop/win64"
+        $dsUrl = "https://discord.com/api/download?platform=win"
         $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        
+        Invoke-WebRequest -Uri $tgUrl -OutFile "TelegramSetup.exe"
+        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
         Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
         
-        # Тихая установка Дискорда и RDP
+        # Тихая установка
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
+        # Телеграм просто запускаем, он портативный в установке
+        Start-Process "TelegramSetup.exe" -ArgumentList "/S"
+
     - name: Authentication
       shell: powershell
       run: |
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
+
     - name: Keep Alive
       run: |
-        Write-Host "Готово! Дискорд установлен, можно заходить."
+        Write-Host "Windows 10 запущена! Discord и Telegram готовы."
         while ($true) { Start-Sleep -Seconds 3600 }
+        
