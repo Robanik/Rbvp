@@ -1,67 +1,58 @@
-name: Ultimate-Cloud-PC-Robanik-Fixed
+name: Ultimate-PC-Final
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Command from Google Remote Desktop'
+        description: 'Google Command'
         required: true
       pincode:
-        description: 'PIN (6 digits)'
+        description: 'PIN'
         required: true
-        default: '123456'
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: Cache Data
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~\AppData\Roaming\discord
+          ~\AppData\Local\discord
+        key: pc-data-v1
 
-    - name: Persistence & Setup
+    - name: Setup
       shell: powershell
       run: |
-        # Включаем звук
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
+        $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+        Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
+        Set-ItemProperty -Path $ts -Name "fDisableAudio" -Value 0
         
-        # Установка софта (игнорируем ошибки Discord, он капризный)
-        Write-Host "Installing Soft..."
-        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y --ignore-checksums || Write-Host "Soft install warning"
+        Write-Host "Installing software..."
+        choco install googlechromeremotedesktop discord vb-audio-virtual-cable -y --no-progress
+        
+        Write-Host "Starting Discord fix..."
+        $ds = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
+        if ($ds) { Start-Process $ds.FullName -ArgumentList "--squirrel-firstrun" }
 
-    - name: Launch PC
-      shell: powershell
-      env:
-        # Передаем код через переменную окружения, чтобы кавычки не ломались
-        GOOGLE_AUTH_CODE: ${{ github.event.inputs.authcode }}
-      run: |
-        # Проверяем наличие кода
-        if (-not $env:GOOGLE_AUTH_CODE) {
-          Write-Error "Auth Code is missing! Please paste the command."
-          exit 1
-        }
-
-        # Фикс Discord
-        Write-Host "Fixing Discord..."
-        $discordExe = Get-ChildItem -Path "$env:LOCALAPPDATA\Discord\app-*\Discord.exe" | Select-Object -First 1
-        if ($discordExe) {
-            Start-Process $discordExe.FullName -ArgumentList "--squirrel-firstrun"
-        }
-
-        # Запуск RDP через вызов переменной
-        Write-Host "Starting Remote Desktop..."
-        Invoke-Expression $env:GOOGLE_AUTH_CODE --pin=${{ github.event.inputs.pincode }}
-
-    - name: Keep-Alive
+    - name: Auth
       shell: powershell
       run: |
-        Write-Host "=== PC RUNNING ==="
+        ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
+
+    - name: Keep Alive
+      shell: powershell
+      run: |
+        Write-Host "PC is UP! To save data, create C:\stop.txt"
         $i = 0
         while ($true) {
           $i++
           if ($i % 5 -eq 0) { 
-            Write-Host "Still alive: $i min"
-            $wsh = New-Object -ComObject WScript.Shell
-            $wsh.SendKeys('{SCROLLLOCK}')
+            Write-Host "Uptime: $i min"
+            $w = New-Object -ComObject WScript.Shell
+            $w.SendKeys('{SCROLLLOCK}')
           }
           if (Test-Path "C:\stop.txt") { break }
           Start-Sleep -Seconds 60
