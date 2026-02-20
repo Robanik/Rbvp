@@ -1,0 +1,21 @@
+name: Windows-RDP
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Set up Chrome Remote Desktop
+      run: |
+        # Здесь мы скачиваем и ставим установщик Chrome RDP
+        $installer = "chromeremotedesktophost.msi"
+        Invoke-WebRequest -Uri "https://dl.google.com/linux/direct/chromeremotedesktophost.msi" -OutFile $installer
+        Start-Process msiexec.exe -Wait -ArgumentList "/i $installer /qn"
+    - name: Auth and Run
+      shell: cmd
+      run: |
+        ${{ github.event.inputs.authcode }}
+    - name: Keep Alive
+      run: |
+        while ($true) { Start-Sleep -Seconds 3600 }
+        
