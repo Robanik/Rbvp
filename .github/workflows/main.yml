@@ -19,7 +19,7 @@ jobs:
     - name: Setup System
       shell: powershell
       run: |
-        # Установка обоев (если файл загружен)
+        # 1. Установка обоев (если файл wallpaper.jpg загружен)
         if (Test-Path "wallpaper.jpg") {
             $wallpaperPath = "C:\wallpaper.jpg"
             Copy-Item "wallpaper.jpg" -Destination $wallpaperPath
@@ -34,14 +34,15 @@ jobs:
             [Wallpaper]::SystemParametersInfo(0x0014, 0, $wallpaperPath, 0x01 -bor 0x02)
         }
 
-        # Быстрая загрузка и установка
+        # 2. Быстрая загрузка RDP и Discord
         Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "rdp.msi"
         Invoke-WebRequest -Uri "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
         
+        # 3. Установка
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
         
-        # Авторизация
+        # 4. Авторизация
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
     - name: Keep Alive
