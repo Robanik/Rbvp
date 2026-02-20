@@ -1,4 +1,4 @@
-name: Robanik-Ultimate-NoNgrok
+name: Robanik-Ultimate-NoNgrok-Fixed
 on: 
   workflow_dispatch:
     inputs:
@@ -14,22 +14,26 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Setup System
+    - name: Setup System (Fixed)
       run: |
+        # Установка пароля
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
+        
+        # Включаем RDP через реестр (вместо WMI)
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        
+        # Звук
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
 
     - name: Install Tailscale & Discord
       run: |
-        # Ставим Tailscale через официальный установщик
         curl -L -o tailscale.msi https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi
         Start-Process msiexec.exe -ArgumentList '/i tailscale.msi /qn /norestart' -Wait
-        
-        # Дискорд в фоне
         curl -L -o ds.exe "https://discord.com/api/download?platform=win"
         Start-Process ds.exe -ArgumentList "/S"
 
@@ -37,7 +41,7 @@ jobs:
       run: |
         & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ github.event.inputs.auth_key }} --hostname=robanik-cloud
 
-    - name: Keep Alive
+    - name: Ready
       run: |
         Write-Host "============================="
         Write-Host "PC IS READY!"
