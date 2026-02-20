@@ -1,4 +1,4 @@
-name: Ultimate-RDP-Ngrok-Final-v2
+name: Ultimate-RDP-Ngrok-Fixed-V3
 on: 
   workflow_dispatch:
     inputs:
@@ -17,8 +17,11 @@ jobs:
     - name: System Setup
       shell: powershell
       run: |
+        # Ставим пароль
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
+        
+        # Включаем звук и RDP
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
@@ -26,48 +29,50 @@ jobs:
         Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
         (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-    - name: Install Ngrok
+    - name: Download & Extract Ngrok
       shell: powershell
       run: |
-        choco install ngrok -y
+        # Качаем напрямую стабильную версию 2026
+        Invoke-WebRequest "https://bin.equinox.io/c/b34edqjn9kv/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip" -ErrorAction SilentlyContinue
+        # Если первая ссылка не сработала, качаем с запасного сервера
+        if (!(Test-Path "ngrok.zip")) {
+          Invoke-WebRequest "https://bin.equinox.io/a/nmSny96M6vD/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+        }
+        Expand-Archive "ngrok.zip" -DestinationPath "."
+        
+        # Качаем Дискорд в фоне
         Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
 
-    - name: Start Tunnel and Get Address
+    - name: Start Tunnel
       shell: powershell
       run: |
-        ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        # Запускаем и ждем
-        Start-Process ngrok -ArgumentList "tcp 3389"
+        .\ngrok.exe config add-authtoken ${{ github.event.inputs.ngrok_token }}
+        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
         
-        Write-Host "Waiting for Ngrok to initialize..."
-        $address = ""
-        for ($i=0; $i -lt 10; $i++) {
+        Write-Host "Waiting for address..."
+        for ($i=0; $i -lt 12; $i++) {
             Start-Sleep -Seconds 5
             try {
                 $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
                 $address = $tunnels.tunnels.public_url -replace 'tcp://', ''
-                if ($address) { break }
-            } catch {
-                Write-Host "Ngrok API not ready yet, retrying..."
-            }
+                if ($address) {
+                    Write-Host "=========================================="
+                    Write-Host "SUCCESS! CONNECT NOW:"
+                    Write-Host "ADDRESS: $address"
+                    Write-Host "USER: runneradmin"
+                    Write-Host "PASS: ${{ github.event.inputs.pincode }}"
+                    Write-Host "=========================================="
+                    $found = $true
+                    break
+                }
+            } catch { Write-Host "Connecting to Ngrok... ($i)" }
         }
-
-        if ($address) {
-            Write-Host "=========================================="
-            Write-Host "SUCCESS! CONNECT NOW:"
-            Write-Host "ADDRESS: $address"
-            Write-Host "USER: runneradmin"
-            Write-Host "PASS: ${{ github.event.inputs.pincode }}"
-            Write-Host "=========================================="
-        } else {
-            Write-Error "Ngrok failed to start. Check your Token!"
-            exit 1
-        }
+        
+        if (!$found) { Write-Error "Failed to get address. Check your token!" }
 
     - name: Keep Alive
       run: |
         while ($true) {
-          Write-Host "Keep-alive: $(Get-Date)"
           Start-Sleep -Seconds 60
         }
