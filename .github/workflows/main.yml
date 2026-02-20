@@ -1,12 +1,12 @@
-name: Ultimate-RDP-Ngrok-Winget
+name: RDP-FINAL-WORK
 on: 
   workflow_dispatch:
     inputs:
       ngrok_token:
-        description: 'Your Ngrok Authtoken'
+        description: 'Ngrok Token'
         required: true
       pincode:
-        description: 'Set Windows Password'
+        description: 'Password'
         required: true
         default: 'Robanik123!'
 
@@ -14,60 +14,38 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: User Setup
-      shell: powershell
+    - name: Setup System
       run: |
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
+        (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
-        $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        Set-ItemProperty -Path $ts -Name "fDisableAudio" -Value 0
-        Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
-        (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-    - name: Install Ngrok & Discord (Winget)
-      shell: powershell
+    - name: Download Files
       run: |
-        # Устанавливаем через встроенный менеджер пакетов Windows
-        winget install --id ngrok.ngrok --accept-package-agreements --accept-source-agreements
-        winget install --id Discord.Discord --accept-package-agreements --accept-source-agreements
+        # Качаем ngrok напрямую в текущую папку
+        Invoke-WebRequest "https://bin.equinox.io/c/b34edqjn9kv/ngrok-v3-stable-windows-amd64.zip" -OutFile "ng.zip"
+        Expand-Archive "ng.zip" -DestinationPath "."
+        # Качаем Дискорд
+        Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "ds.exe"
+        Start-Process "ds.exe" -ArgumentList "/S"
 
-    - name: Start Tunnel
-      shell: powershell
+    - name: Connect and Show ID
       run: |
-        # После установки winget путь может не обновиться сразу, поэтому используем полный путь
-        $ngrokPath = (Get-ChildItem -Path "C:\Program Files\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1).FullName
-        if (!$ngrokPath) { $ngrokPath = "ngrok" } # Если не нашли, пробуем обычный вызов
-
-        & $ngrokPath config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        Start-Process $ngrokPath -ArgumentList "tcp 3389"
+        .\ngrok.exe config add-authtoken ${{ github.event.inputs.ngrok_token }}
+        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
+        Start-Sleep -Seconds 15
+        $t = Invoke-RestMethod http://localhost:4040/api/tunnels
+        $addr = $t.tunnels.public_url -replace 'tcp://', ''
         
-        Write-Host "Waiting for address..."
-        $found = $false
-        for ($i=0; $i -lt 15; $i++) {
-            Start-Sleep -Seconds 5
-            try {
-                $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
-                $address = $tunnels.tunnels.public_url -replace 'tcp://', ''
-                if ($address) {
-                    Write-Host "=========================================="
-                    Write-Host "SUCCESS! CONNECT NOW:"
-                    Write-Host "ADDRESS: $address"
-                    Write-Host "USER: runneradmin"
-                    Write-Host "PASS: ${{ github.event.inputs.pincode }}"
-                    Write-Host "=========================================="
-                    $found = $true
-                    break
-                }
-            } catch { Write-Host "Checking Ngrok status... ($i)" }
-        }
+        # МАГИЯ: Это выведет адрес прямо в заголовок логов!
+        Write-Host "::notice title=YOUR_RDP_ADDRESS::$addr"
         
-        if (!$found) { Write-Error "Failed to get address." }
-
-    - name: Keep Alive
-      run: |
-        while ($true) {
-          Write-Host "Session is active..."
-          Start-Sleep -Seconds 60
-        }
+        Write-Host "============================="
+        Write-Host "ADDRESS: $addr"
+        Write-Host "USER: runneradmin"
+        Write-Host "PASS: ${{ github.event.inputs.pincode }}"
+        Write-Host "============================="
+        
+        while($true){ Start-Sleep 60 }
