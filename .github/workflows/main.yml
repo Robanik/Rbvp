@@ -1,9 +1,12 @@
-name: Windows-RDP-Final
+name: Windows-RDP-Ultimate
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Вставь команду из Google Remote Desktop (которая начинается с & или powershell)'
+        description: 'Вставь команду из Google Remote Desktop'
+        required: true
+      pincode:
+        description: 'Вставь свой ПИН-КОД (6 цифр)'
         required: true
 
 jobs:
@@ -18,8 +21,8 @@ jobs:
     - name: Authentication
       shell: powershell
       run: |
-        ${{ github.event.inputs.authcode }}
+        ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
     - name: Keep Alive
       run: |
-        Write-Host "Виртуалка успешно запущена! Можно подключаться через телефон."
+        Write-Host "Все готово! Подключайся через приложение на телефоне."
         while ($true) { Start-Sleep -Seconds 3600 }
