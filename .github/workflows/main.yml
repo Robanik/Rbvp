@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       pass:
-        description: 'Key'
+        description: 'Set RustDesk Password'
         required: true
         default: 'robanik123'
 
@@ -19,37 +19,51 @@ jobs:
           ~\AppData\Local\discord
         key: app-data-v1
 
-    - name: Run Build Steps
+    - name: Install and Launch
       shell: powershell
       run: |
-        # Включаем звук (без палевных комментов)
+        # 1. Enable Audio
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         $t="HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
         Set-ItemProperty -Path $t -Name "fDisableAudioCapture" -Value 0
         Set-ItemProperty -Path $t -Name "fDisableAudio" -Value 0
 
-        # Прямые ссылки на софт
+        # 2. Download Software
         $r="https://github.com/rustdesk/rustdesk/releases/download/1.2.3-2/rustdesk-1.2.3-2-x86_64.exe"
         $d="https://discord.com/api/download?platform=win"
         Invoke-WebRequest $r -OutFile "rd.exe"
         Invoke-WebRequest $d -OutFile "ds.exe"
         
-        # Ставим Дискорд
+        # 3. Install Discord & Start RustDesk
         Start-Process "ds.exe" -ArgumentList "/S"
-
-        # Запуск RustDesk с паролем
         Start-Process "rd.exe" -ArgumentList "--password ${{ github.event.inputs.pass }}"
-        
+
     - name: Finalizing
       shell: powershell
       run: |
-        Start-Sleep -Seconds 20
-        $cfg = Get-Content "$env:APPDATA\RustDesk\config\RustDesk.toml" -ErrorAction SilentlyContinue
-        Write-Host "--- SYSTEM READY ---"
-        $cfg | Select-String "id ="
-        Write-Host "Key: ${{ github.event.inputs.pass }}"
+        Write-Host "Searching for RustDesk ID..."
+        $id = ""
+        for ($i=0; $i -lt 20; $i++) {
+            Start-Sleep -Seconds 10
+            $cfg = Get-Content "$env:APPDATA\RustDesk\config\RustDesk.toml" -ErrorAction SilentlyContinue
+            if ($cfg) {
+                $idLine = $cfg | Select-String "id ="
+                if ($idLine) {
+                    Write-Host "============================"
+                    Write-Host "SYSTEM IS READY!"
+                    Write-Host "YOUR $idLine"
+                    Write-Host "YOUR PASSWORD: ${{ github.event.inputs.pass }}"
+                    Write-Host "============================"
+                    $id = "found"
+                    break
+                }
+            }
+            Write-Host "Still waiting for ID... (Attempt $i)"
+        }
         
+        if (-not $id) { Write-Error "ID not found in time. Check if RustDesk started." }
+
         while ($true) {
           if (Test-Path "C:\stop.txt") { break }
           (New-Object -ComObject WScript.Shell).SendKeys('{SCROLLLOCK}')
