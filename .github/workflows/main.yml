@@ -1,4 +1,4 @@
-name: Ideal-Fast-RDP
+name: Fast-RDP-Discord-Only
 on: 
   workflow_dispatch:
     inputs:
@@ -13,40 +13,25 @@ jobs:
   build:
     runs-on: windows-2019
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup System
+    - name: Setup & Run
       shell: powershell
       run: |
-        # 1. Установка обоев (если файл wallpaper.jpg загружен)
-        if (Test-Path "wallpaper.jpg") {
-            $wallpaperPath = "C:\wallpaper.jpg"
-            Copy-Item "wallpaper.jpg" -Destination $wallpaperPath
-            $code = @'
-            using System.Runtime.InteropServices;
-            public class Wallpaper {
-                [DllImport("user32.dll", CharSet = CharSet.Auto)]
-                public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-            }
-'@
-            Add-Type -TypeDefinition $code
-            [Wallpaper]::SystemParametersInfo(0x0014, 0, $wallpaperPath, 0x01 -bor 0x02)
-        }
-
-        # 2. Быстрая загрузка RDP и Discord
-        Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "rdp.msi"
-        Invoke-WebRequest -Uri "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
+        # Быстрая загрузка компонентов
+        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        $dsUrl = "https://discord.com/api/download?platform=win"
         
-        # 3. Установка
+        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
+        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
+        
+        # Установка (RDP тихо, Дискорд в фоне)
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
         
-        # 4. Авторизация
+        # Авторизация
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
     - name: Keep Alive
       shell: powershell
       run: |
-        Write-Host "Все готово! Обои и Дискорд на месте."
+        Write-Host "ПК запущен! У тебя есть 6 часов."
         while ($true) { Start-Sleep -Seconds 60 }
