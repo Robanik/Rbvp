@@ -1,4 +1,4 @@
-name: Robanik-Ultimate-NoNgrok-Fixed
+name: Robanik-Ultimate-NoNgrok-Portable
 on: 
   workflow_dispatch:
     inputs:
@@ -14,39 +14,43 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Setup System (Fixed)
+    - name: Setup System
       run: |
-        # Установка пароля
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        
-        # Включаем RDP через реестр (вместо WMI)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        
-        # Звук
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
 
-    - name: Install Tailscale & Discord
+    - name: Download Tailscale Portable
       run: |
-        curl -L -o tailscale.msi https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi
+        # Качаем zip-архив Tailscale вместо инсталлятора
+        curl -L -o tailscale.zip https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe
+        # На самом деле лучше возьмем проверенный метод установки, но заставим скрипт ЖДАТЬ
+        Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi -OutFile tailscale.msi
         Start-Process msiexec.exe -ArgumentList '/i tailscale.msi /qn /norestart' -Wait
-        curl -L -o ds.exe "https://discord.com/api/download?platform=win"
-        Start-Process ds.exe -ArgumentList "/S"
+        
+        # Ждем 15 секунд на всякий случай, чтобы файлы появились
+        Start-Sleep -Seconds 15
 
     - name: Connect to Mesh
+      shell: powershell
       run: |
-        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ github.event.inputs.auth_key }} --hostname=robanik-cloud
+        # Проверяем, где появился exe, и запускаем
+        $tsPath = Get-ChildItem -Path "C:\Program Files\Tailscale" -Filter "tailscale.exe" -Recurse | Select-Object -First 1
+        if ($tsPath) {
+            & $tsPath.FullName up --authkey=${{ github.event.inputs.auth_key }} --hostname=robanik-cloud
+        } else {
+            Write-Error "Tailscale не нашелся. Пробую запустить через системный путь..."
+            tailscale up --authkey=${{ github.event.inputs.auth_key }} --hostname=robanik-cloud
+        }
 
     - name: Ready
       run: |
         Write-Host "============================="
         Write-Host "PC IS READY!"
-        Write-Host "NAME: robanik-cloud"
-        Write-Host "USER: runneradmin"
-        Write-Host "PASS: ${{ github.event.inputs.pincode }}"
+        Write-Host "Если в Tailscale на телефоне видишь 'robanik-cloud' — ЗАХОДИ!"
         Write-Host "============================="
         while($true){ Start-Sleep 60 }
