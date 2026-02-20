@@ -1,21 +1,24 @@
 name: Windows-RDP
-on: workflow_dispatch
+on: 
+  workflow_dispatch:
+    inputs:
+      authcode:
+        description: '& "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" --code="4/0AfrIepDQW_sD5kZly6uhU7czCvbHGpjO4IeELnEJa8nLf_YD3tl1GMHbgIKcilnw2yuGHQ" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME'
+        required: true
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Set up Chrome Remote Desktop
+    - name: Download and Install Chrome RDP
       run: |
-        # Здесь мы скачиваем и ставим установщик Chrome RDP
-        $installer = "chromeremotedesktophost.msi"
-        Invoke-WebRequest -Uri "https://dl.google.com/linux/direct/chromeremotedesktophost.msi" -OutFile $installer
-        Start-Process msiexec.exe -Wait -ArgumentList "/i $installer /qn"
-    - name: Auth and Run
+        $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        Invoke-WebRequest -Uri $url -OutFile "rdp.msi"
+        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
+    - name: Authentication
       shell: cmd
-      run: |
-        ${{ github.event.inputs.authcode }}
+      run: ${{ github.event.inputs.authcode }}
     - name: Keep Alive
       run: |
+        Write-Host "Виртуалка запущена! Не закрывай этот Action."
         while ($true) { Start-Sleep -Seconds 3600 }
-        
