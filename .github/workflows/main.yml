@@ -1,4 +1,4 @@
-name: Windows-RDP-Ultimate
+name: Windows-RDP-Discord-Auto
 on: 
   workflow_dispatch:
     inputs:
@@ -13,16 +13,24 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Download and Install Chrome RDP
+    - name: Install Discord and Chrome RDP
       run: |
-        $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        Invoke-WebRequest -Uri $url -OutFile "rdp.msi"
+        # Скачиваем Дискорд
+        $discordUrl = "https://discord.com/api/download?platform=win"
+        Invoke-WebRequest -Uri $discordUrl -OutFile "DiscordSetup.exe"
+        
+        # Скачиваем Chrome RDP
+        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
+        
+        # Тихая установка Дискорда и RDP
         Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
+        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
     - name: Authentication
       shell: powershell
       run: |
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
     - name: Keep Alive
       run: |
-        Write-Host "Все готово! Подключайся через приложение на телефоне."
+        Write-Host "Готово! Дискорд установлен, можно заходить."
         while ($true) { Start-Sleep -Seconds 3600 }
