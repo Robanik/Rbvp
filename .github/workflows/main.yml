@@ -1,4 +1,4 @@
-name: Ultimate-RDP-Ngrok-Fixed
+name: Ultimate-RDP-Ngrok-Final-v2
 on: 
   workflow_dispatch:
     inputs:
@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Set Password & Audio
+    - name: System Setup
       shell: powershell
       run: |
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
@@ -26,35 +26,48 @@ jobs:
         Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
         (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-    - name: Install Tools
+    - name: Install Ngrok
       shell: powershell
       run: |
-        # Используем проверенный метод установки ngrok
         choco install ngrok -y
-        # Качаем Дискорд напрямую
         Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
 
-    - name: Start Tunnel
+    - name: Start Tunnel and Get Address
       shell: powershell
       run: |
         ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        # Запускаем туннель в фоновом режиме
+        # Запускаем и ждем
         Start-Process ngrok -ArgumentList "tcp 3389"
-        Start-Sleep -Seconds 15
         
-        # Получаем адрес
-        $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
-        $address = $tunnels.tunnels.public_url -replace 'tcp://', ''
-        Write-Host "=========================================="
-        Write-Host "CONNECT TO: $address"
-        Write-Host "USER: runneradmin"
-        Write-Host "PASS: ${{ github.event.inputs.pincode }}"
-        Write-Host "=========================================="
+        Write-Host "Waiting for Ngrok to initialize..."
+        $address = ""
+        for ($i=0; $i -lt 10; $i++) {
+            Start-Sleep -Seconds 5
+            try {
+                $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
+                $address = $tunnels.tunnels.public_url -replace 'tcp://', ''
+                if ($address) { break }
+            } catch {
+                Write-Host "Ngrok API not ready yet, retrying..."
+            }
+        }
+
+        if ($address) {
+            Write-Host "=========================================="
+            Write-Host "SUCCESS! CONNECT NOW:"
+            Write-Host "ADDRESS: $address"
+            Write-Host "USER: runneradmin"
+            Write-Host "PASS: ${{ github.event.inputs.pincode }}"
+            Write-Host "=========================================="
+        } else {
+            Write-Error "Ngrok failed to start. Check your Token!"
+            exit 1
+        }
 
     - name: Keep Alive
       run: |
         while ($true) {
-          Write-Host "Server Heartbeat: $(Get-Date)"
+          Write-Host "Keep-alive: $(Get-Date)"
           Start-Sleep -Seconds 60
         }
