@@ -1,42 +1,78 @@
-name: Fast-RDP-With-Audio
+name: Ultimate-Cloud-PC-Pro
 on: 
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Команда от Google'
+        description: 'Код из Google Remote Desktop'
         required: true
       pincode:
-        description: 'ПИН (6 цифр)'
+        description: 'ПИН (минимум 6 цифр)'
         required: true
 
 jobs:
   build:
-    runs-on: windows-2019
+    runs-on: windows-latest
     steps:
-    - name: Setup & Audio Fix
-      shell: powershell
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 1. Восстановление данных (Discord, сессии, конфиги)
+    - name: Restore Persistence Data
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~\AppData\Roaming\discord
+          ~\AppData\Local\discord
+          ~\AppData\Local\Google\Chrome Remote Desktop
+        key: pc-data-${{ github.run_id }}
+        restore-keys: |
+          pc-data-
+
+    - name: System Optimization & Audio Fix
       run: |
-        # 1. Включаем аудио-службы ПЕРЕД установкой всего остального
+        # Включаем аудио-движок Windows
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudioCapture" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudio" -Value 0
+        # Твики реестра для RDP и звука
+        reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudioCapture /t REG_DWORD /d 0 /f
+        reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudio /t REG_DWORD /d 0 /f
 
-        # 2. Быстрая загрузка
-        $rdpUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        $dsUrl = "https://discord.com/api/download?platform=win"
-        Invoke-WebRequest -Uri $rdpUrl -OutFile "rdp.msi"
-        Invoke-WebRequest -Uri $dsUrl -OutFile "DiscordSetup.exe"
-        
-        # 3. Установка
-        Start-Process msiexec.exe -Wait -ArgumentList "/i rdp.msi /qn"
-        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
-        
-        # 4. Авторизация
+    - name: Install "Imba" Pack (Choco)
+      run: |
+        # Ставим всё разом: RDP, Discord, Виртуальный звук и архиватор
+        choco install googlechromeremotedesktop discord vb-audio-virtual-cable 7zip -y
+
+    - name: Finalize & Launch
+      run: |
+        Write-Host "Запуск Google Remote Desktop..."
+        # Команда авторизации из инпута
         ${{ github.event.inputs.authcode }} --pin=${{ github.event.inputs.pincode }}
 
-    - name: Keep Alive
+    - name: Keep-Alive & Sync Loop
       shell: powershell
       run: |
-        Write-Host "ПК запущен! Проверяй звук в Discord."
-        while ($true) { Start-Sleep -Seconds 60 }
+        $i = 0
+        Write-Host "=========================================="
+        Write-Host "ПК ГОТОВ! ИНСТРУКЦИЯ:"
+        Write-Host "1. Подключайся через remotedesktop.google.com"
+        Write-Host "2. Чтобы СОХРАНИТЬ данные Discord, создай файл C:\stop.txt"
+        Write-Host "=========================================="
+        
+        while ($true) {
+          $i++
+          # Каждые 5 минут имитируем нажатие клавиши (для анти-афк системы GitHub)
+          $wsh = New-Object -ComObject WScript.Shell
+          $wsh.SendKeys('{SCROLLLOCK}')
+          
+          if ($i % 10 -eq 0) {
+            Write-Host "Сессия активна: $i мин. Нагрузка в норме."
+          }
+
+          # Проверка на "ручной тормоз" для сохранения кэша
+          if (Test-Path "C:\stop.txt") {
+            Write-Host "Обнаружен стоп-файл. Завершаю работу для сохранения данных..."
+            break
+          }
+          
+          Start-Sleep -Seconds 60
+        }
