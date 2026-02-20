@@ -1,0 +1,50 @@
+name: Cloud-PC-Custom
+on:
+  workflow_dispatch:
+    inputs:
+      crd_code:
+        description: 'Вставь сюда --code из Google Headless'
+        required: true
+      crd_pin:
+        description: 'Придумай PIN (минимум 6 цифр) для входа'
+        required: true
+        default: '123456'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Установка компонентов (CRD, Discord, Audio)
+      run: |
+        # CRD
+        $crdUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        Invoke-WebRequest -Uri $crdUrl -OutFile "crd.msi"
+        Start-Process msiexec.exe -ArgumentList "/i crd.msi /qn" -Wait
+        
+        # Discord
+        $discordUrl = "https://discord.com/api/download?platform=win"
+        Invoke-WebRequest -Uri $discordUrl -OutFile "DiscordSetup.exe"
+        Start-Process ".\DiscordSetup.exe" -ArgumentList "--s" -Wait
+        
+        # Виртуальный звук (нужен для запуска аудио-потока)
+        Invoke-WebRequest -Uri "https://download.vb-audio.com/Download_Html/VBCABLE_Setup_x64.exe" -OutFile "VBAudio.exe"
+        Start-Process ".\VBAudio.exe" -ArgumentList "/i /silent" -Wait
+
+    - name: Запуск Хоста
+      run: |
+        # Используем данные из полей ввода (inputs)
+        & "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" `
+        --code="${{ github.event.inputs.crd_code }}" `
+        --redirect-url="https://remotedesktop.google.com/_/oauthredirect" `
+        --name=$Env:COMPUTERNAME `
+        --pin=${{ github.event.inputs.crd_pin }}
+
+    - name: Поддержание сессии (6 часов)
+      run: |
+        Write-Host "PC ready! Connect now."
+        $i = 0
+        while($i -lt 360) {
+          Start-Sleep -Seconds 60
+          $i++
+        }
+        
