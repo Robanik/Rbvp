@@ -1,4 +1,4 @@
-name: Ultimate-RDP-Ngrok-Fixed-V4
+name: Ultimate-RDP-Ngrok-Winget
 on: 
   workflow_dispatch:
     inputs:
@@ -14,14 +14,11 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: System Setup
+    - name: User Setup
       shell: powershell
       run: |
-        # Ставим пароль
         $Password = ConvertTo-SecureString "${{ github.event.inputs.pincode }}" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $Password
-        
-        # Включаем звук и RDP
         Set-Service -Name "Audiosrv" -StartupType Automatic
         Start-Service -Name "Audiosrv"
         $ts = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
@@ -29,24 +26,22 @@ jobs:
         Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
         (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-    - name: Install Ngrok via Script
+    - name: Install Ngrok & Discord (Winget)
       shell: powershell
       run: |
-        # Официальный способ установки Ngrok без прямых ссылок
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://ngrok-agent.s3.amazonaws.com/ngrok.ps1'))
-        
-        # Качаем Дискорд
-        Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
-        Start-Process "DiscordSetup.exe" -ArgumentList "/S"
+        # Устанавливаем через встроенный менеджер пакетов Windows
+        winget install --id ngrok.ngrok --accept-package-agreements --accept-source-agreements
+        winget install --id Discord.Discord --accept-package-agreements --accept-source-agreements
 
     - name: Start Tunnel
       shell: powershell
       run: |
-        # После установки скриптом ngrok доступен сразу
-        ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        Start-Process ngrok -ArgumentList "tcp 3389"
+        # После установки winget путь может не обновиться сразу, поэтому используем полный путь
+        $ngrokPath = (Get-ChildItem -Path "C:\Program Files\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1).FullName
+        if (!$ngrokPath) { $ngrokPath = "ngrok" } # Если не нашли, пробуем обычный вызов
+
+        & $ngrokPath config add-authtoken ${{ github.event.inputs.ngrok_token }}
+        Start-Process $ngrokPath -ArgumentList "tcp 3389"
         
         Write-Host "Waiting for address..."
         $found = $false
@@ -68,11 +63,11 @@ jobs:
             } catch { Write-Host "Checking Ngrok status... ($i)" }
         }
         
-        if (!$found) { Write-Error "Failed to get address. Check your token!" }
+        if (!$found) { Write-Error "Failed to get address." }
 
     - name: Keep Alive
       run: |
         while ($true) {
-          Write-Host "PC is Running... $(Get-Date)"
+          Write-Host "Session is active..."
           Start-Sleep -Seconds 60
         }
