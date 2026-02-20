@@ -1,4 +1,4 @@
-name: Ultimate-RDP-Ngrok-Fixed-V3
+name: Ultimate-RDP-Ngrok-Fixed-V4
 on: 
   workflow_dispatch:
     inputs:
@@ -29,29 +29,28 @@ jobs:
         Set-ItemProperty -Path $ts -Name "fDisableAudioCapture" -Value 0
         (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTSConnections(1,1)
 
-    - name: Download & Extract Ngrok
+    - name: Install Ngrok via Script
       shell: powershell
       run: |
-        # Качаем напрямую стабильную версию 2026
-        Invoke-WebRequest "https://bin.equinox.io/c/b34edqjn9kv/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip" -ErrorAction SilentlyContinue
-        # Если первая ссылка не сработала, качаем с запасного сервера
-        if (!(Test-Path "ngrok.zip")) {
-          Invoke-WebRequest "https://bin.equinox.io/a/nmSny96M6vD/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
-        }
-        Expand-Archive "ngrok.zip" -DestinationPath "."
+        # Официальный способ установки Ngrok без прямых ссылок
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        iex ((New-Object System.Net.WebClient).DownloadString('https://ngrok-agent.s3.amazonaws.com/ngrok.ps1'))
         
-        # Качаем Дискорд в фоне
+        # Качаем Дискорд
         Invoke-WebRequest "https://discord.com/api/download?platform=win" -OutFile "DiscordSetup.exe"
         Start-Process "DiscordSetup.exe" -ArgumentList "/S"
 
     - name: Start Tunnel
       shell: powershell
       run: |
-        .\ngrok.exe config add-authtoken ${{ github.event.inputs.ngrok_token }}
-        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
+        # После установки скриптом ngrok доступен сразу
+        ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
+        Start-Process ngrok -ArgumentList "tcp 3389"
         
         Write-Host "Waiting for address..."
-        for ($i=0; $i -lt 12; $i++) {
+        $found = $false
+        for ($i=0; $i -lt 15; $i++) {
             Start-Sleep -Seconds 5
             try {
                 $tunnels = Invoke-RestMethod http://localhost:4040/api/tunnels
@@ -66,7 +65,7 @@ jobs:
                     $found = $true
                     break
                 }
-            } catch { Write-Host "Connecting to Ngrok... ($i)" }
+            } catch { Write-Host "Checking Ngrok status... ($i)" }
         }
         
         if (!$found) { Write-Error "Failed to get address. Check your token!" }
@@ -74,5 +73,6 @@ jobs:
     - name: Keep Alive
       run: |
         while ($true) {
+          Write-Host "PC is Running... $(Get-Date)"
           Start-Sleep -Seconds 60
         }
