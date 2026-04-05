@@ -1,4 +1,4 @@
-name: CRD-Lite
+name: CRD-Lite-Final
 on:
   workflow_dispatch:
     inputs:
@@ -16,14 +16,21 @@ jobs:
     steps:
     - shell: pwsh
       run: |
-        # Установка
-        $msi = "crd.msi"
-        (New-Object Net.WebClient).DownloadFile("https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi", $msi)
+        # 1. Качаем и ставим
+        $msi = "$env:TEMP\crd.msi"
+        Invoke-WebRequest "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile $msi
         Start-Process msiexec.exe -ArgumentList "/i $msi /qn" -Wait
 
-        # Запуск одной командой (без переменных-массивов)
-        & "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" --code="${{ github.event.inputs.crd_code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=${{ github.event.inputs.crd_pin }}
+        # 2. Запуск (используем переменные окружения, чтобы избежать каши с кавычками)
+        $CODE = "${{ github.event.inputs.crd_code }}"
+        $PIN = "${{ github.event.inputs.crd_pin }}"
+        $EXE = "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
 
-        # Ожидание (6 часов)
-        Write-Host "Ready to connect!"
-        while($true) { Start-Sleep -Seconds 3600 }
+        Write-Host "Попытка запуска хоста..."
+        
+        # Запуск БЕЗ лишних оберток
+        & $EXE --code=$CODE --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=$PIN
+
+        # 3. Проверка и ожидание
+        Write-Host "Если выше нет ошибок — проверяй список устройств."
+        while($true) { Start-Sleep -Seconds 60 }
