@@ -1,36 +1,29 @@
-name: CRD-Simple
+name: CRD-Lite
 on:
   workflow_dispatch:
     inputs:
       crd_code:
-        description: 'Код из Google Headless'
+        description: 'Code'
         required: true
       crd_pin:
-        description: 'PIN (6+ цифр)'
+        description: 'PIN'
         required: true
         default: '123456'
 
 jobs:
-  run-crd:
+  start:
     runs-on: windows-latest
     steps:
-    - name: Установка и запуск CRD
-      shell: pwsh
+    - shell: pwsh
       run: |
-        # 1. Скачивание и тихая установка
-        $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        Invoke-WebRequest -Uri $url -OutFile "crd.msi"
-        Start-Process msiexec.exe -ArgumentList "/i crd.msi /qn" -Wait
+        # Установка
+        $msi = "crd.msi"
+        (New-Object Net.WebClient).DownloadFile("https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi", $msi)
+        Start-Process msiexec.exe -ArgumentList "/i $msi /qn" -Wait
 
-        # 2. Запуск хоста
-        $args = @(
-          "--code=${{ github.event.inputs.crd_code }}",
-          "--redirect-url=https://remotedesktop.google.com/_/oauthredirect",
-          "--name=$Env:COMPUTERNAME",
-          "--pin=${{ github.event.inputs.crd_pin }}"
-        )
-        Start-Process "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" -ArgumentList $args -Wait
+        # Запуск одной командой (без переменных-массивов)
+        & "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" --code="${{ github.event.inputs.crd_code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=${{ github.event.inputs.crd_pin }}
 
-        # 3. Бесконечный цикл, чтобы воркфлоу не закрылся (6 часов)
-        Write-Host "Бот запущен. Подключайся!"
-        for ($i=0; $i -lt 360; $i++) { Start-Sleep -Seconds 60 }
+        # Ожидание (6 часов)
+        Write-Host "Ready to connect!"
+        while($true) { Start-Sleep -Seconds 3600 }
