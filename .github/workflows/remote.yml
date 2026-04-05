@@ -1,58 +1,36 @@
-name: Cloud-PC-Final
+name: CRD-Simple
 on:
   workflow_dispatch:
     inputs:
       crd_code:
-        description: 'Вставь ТОЛЬКО код (тот, что после --code=)'
+        description: 'Код из Google Headless'
         required: true
       crd_pin:
-        description: 'PIN (минимум 6 цифр)'
+        description: 'PIN (6+ цифр)'
         required: true
         default: '123456'
 
 jobs:
-  build:
+  run-crd:
     runs-on: windows-latest
     steps:
-    - name: 1. Подготовка софта
-      run: |
-        # Ставим CRD
-        $crdUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        Invoke-WebRequest -Uri $crdUrl -OutFile "crd.msi"
-        Start-Process msiexec.exe -ArgumentList "/i crd.msi /qn" -Wait
-        
-        # Качаем Discord
-        $discordUrl = "https://discord.com/api/download?platform=win"
-        Invoke-WebRequest -Uri $discordUrl -OutFile "DiscordSetup.exe"
-
-    - name: 2. Запуск CRD
+    - name: Установка и запуск CRD
       shell: pwsh
       run: |
-        $AUTH_CODE = "${{ github.event.inputs.crd_code }}".Trim()
-        $PIN = "${{ github.event.inputs.crd_pin }}".Trim()
-        
-        if ([string]::IsNullOrWhiteSpace($AUTH_CODE)) { 
-          Write-Error "Код пустой! Скопируй его из Google Headless."; exit 1 
-        }
+        # 1. Скачивание и тихая установка
+        $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        Invoke-WebRequest -Uri $url -OutFile "crd.msi"
+        Start-Process msiexec.exe -ArgumentList "/i crd.msi /qn" -Wait
 
-        Write-Host "Запускаю хост с кодом: $AUTH_CODE"
-
-        # Прямой запуск через Start-Process, чтобы избежать проблем с кавычками в строке
+        # 2. Запуск хоста
         $args = @(
-          "--code=$AUTH_CODE",
+          "--code=${{ github.event.inputs.crd_code }}",
           "--redirect-url=https://remotedesktop.google.com/_/oauthredirect",
           "--name=$Env:COMPUTERNAME",
-          "--pin=$PIN"
+          "--pin=${{ github.event.inputs.crd_pin }}"
         )
-        
-        Start-Process -FilePath "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" -ArgumentList $args -Wait
+        Start-Process "${Env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" -ArgumentList $args -Wait
 
-    - name: 3. Установка Discord и Ожидание
-      run: |
-        Start-Process ".\DiscordSetup.exe" -ArgumentList "--s"
-        Write-Host "Готово! Если CRD не вылетел с ошибкой выше - подключайся."
-        $i = 0
-        while($i -lt 360) {
-          Start-Sleep -Seconds 60
-          $i++
-        }
+        # 3. Бесконечный цикл, чтобы воркфлоу не закрылся (6 часов)
+        Write-Host "Бот запущен. Подключайся!"
+        for ($i=0; $i -lt 360; $i++) { Start-Sleep -Seconds 60 }
